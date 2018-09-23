@@ -137,8 +137,18 @@ class CaffeGraph {
         });
 
         if (netParameter.input && netParameter.input.length > 0) {
-            netParameter.input.forEach((input) => {
-                this._inputs.push(new CaffeArgument(input, [ new CaffeConnection(input, null, null) ]));
+            netParameter.input.forEach((input, index) => {
+                var inputType = null;
+                if (netParameter.input_shape && index < netParameter.input_shape.length) {
+                    var blobShape = netParameter.input_shape[index];
+                    if (blobShape && blobShape.dim) {
+                        inputType = new CaffeTensorType(null, blobShape.dim);
+                    }
+                }
+                if (inputType == null && netParameter.input.length == 1 && netParameter.input_dim && netParameter.input_dim.length > 0) {
+                    inputType = new CaffeTensorType(null, netParameter.input_dim);
+                }
+                this._inputs.push(new CaffeArgument(input, [ new CaffeConnection(input, inputType, null) ]));
             });
         }
 
@@ -205,14 +215,14 @@ class CaffeGraph {
     }
 
     translateInput(node) {
-        if (node.operator == 'Input') {
+        if (node.operator == 'Input' || node.operator == 'Data') {
             if (node._inputs.length == 0 && node._outputs.length == 1) {
-                var input = node._outputs[0];
                 var attributes = node.attributes;
                 if (attributes.length == 1) {
                     var attribute = attributes[0];
                     if (attribute.name == 'shape') {
                         if (attribute._value.length == 1 && attribute._value[0].dim) {
+                            var input = node._outputs[0];
                             var type = new CaffeTensorType(null, attribute._value[0].dim);
                             this._inputs.push(new CaffeArgument(input, [ new CaffeConnection(input, type) ]));
                             return true;
@@ -320,6 +330,9 @@ class CaffeNode {
                         }
                     }
                 });
+                if (this._type == 'Data' && layer.input_param && layer.input_param.shape) {
+                    this._attributes.push(new CaffeAttribute(this, 'shape', layer.input_param.shape));
+                }
                 layer.blobs.forEach((blob) => {
                     this._initializers.push(new CaffeTensor(blob));
                 });
